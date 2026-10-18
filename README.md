@@ -127,14 +127,15 @@ Ask in plain language ("search the web for…", "fetch and summarize this URL")
 and the agent picks the tools automatically. The tools appear to the model as:
 
 ```text
-deepseek_search_web_search
-deepseek_search_web_fetch
+deepseek-search_web_search
+deepseek-search_web_fetch
 ```
 
-Under Code Mode they are grouped by server name:
+Under Code Mode they are grouped by server name. The hyphen is preserved, so
+index the group with bracket notation:
 
 ```js
-const out = await tools.deepseek_search.web_search({ query: "latest Rust release", count: 5 })
+const out = await tools["deepseek-search"].web_search({ query: "latest Rust release", count: 5 })
 ```
 
 ---
