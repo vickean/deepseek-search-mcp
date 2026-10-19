@@ -104,7 +104,70 @@ The server is registered in `~/.config/opencode/opencode.json` under
 `{env:DEEPSEEK_API_KEY}` is substituted from OpenCode's process environment at
 launch; the secret is never stored in the config file.
 
-### 3. Dependencies and restart
+### 3. Headless services (no inherited shell environment)
+
+`{env:DEEPSEEK_API_KEY}` is resolved from the environment of the process that
+starts OpenCode's background **service**. When that service is autostarted by a
+launcher, a login manager, or a service unit that does not source your shell
+profile, the variable is missing and every call fails with
+`DEEPSEEK_API_KEY is not set`.
+
+For that case, keep the key in a private file outside this repository and let a
+launcher script export it before the server starts. The secret still never
+appears in `opencode.json`, in the command line, or in any tracked file.
+
+```bash
+# 1. The key file — plain KEY=value, no export, no quotes.
+umask 077
+printf 'DEEPSEEK_API_KEY=sk-your-key\n' > ~/.config/opencode/mcp/deepseek-search.env
+chmod 600 ~/.config/opencode/mcp/deepseek-search.env
+```
+
+```bash
+# 2. The launcher — sources the key file, then execs the server.
+cat > ~/.config/opencode/mcp/run-deepseek-search.sh <<'SH'
+#!/bin/sh
+set -e
+MCP_DIR="$HOME/.config/opencode/mcp"
+set -a
+. "$MCP_DIR/deepseek-search.env"
+set +a
+exec node "$MCP_DIR/deepseek-search/index.js"
+SH
+chmod 700 ~/.config/opencode/mcp/run-deepseek-search.sh
+```
+
+The service may not have `node` on its `PATH` (version managers such as nvm
+usually only export it into interactive shells). If `exec node` fails with
+`node: not found`, replace `node` with the absolute path to the binary, for
+example `/Users/you/.nvm/versions/node/v22.21.1/bin/node`.
+
+Point the server at the launcher:
+
+```bash
+opencode mcp add deepseek-search --global -- ~/.config/opencode/mcp/run-deepseek-search.sh
+```
+
+or, by hand:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "deepseek-search": {
+        "type": "local",
+        "command": ["/Users/you/.config/opencode/mcp/run-deepseek-search.sh"]
+      }
+    }
+  }
+}
+```
+
+To swap back to the environment-variable route later, delete the
+`environment` block from the server entry and point `command` at `index.js`
+again.
+
+### 4. Dependencies and restart
 
 ```bash
 cd ~/.config/opencode/mcp/deepseek-search
@@ -163,7 +226,9 @@ const out = await tools["deepseek-search"].web_search({ query: "latest Rust rele
 
 **`DEEPSEEK_API_KEY is not set`** — the variable is not visible to the server
 process. Export it in the environment that starts OpenCode's service, then
-`opencode service restart`.
+`opencode service restart`. If the service does not inherit your shell
+profile, use the launcher script from [Headless
+services](#3-headless-services-no-inherited-shell-environment) instead.
 
 **`DeepSeek API error (401 …)`** — invalid or revoked key.
 
@@ -187,6 +252,9 @@ text as-is; this is a property of the source page, not the server.
 | `index.js` | The MCP server (stdio transport, two tools). |
 | `package.json` | Declares the SDK and zod dependencies. |
 | `node_modules/` | Installed dependencies. |
+
+The key file and launcher script used by the headless setup live outside this
+directory, so this repository stays free of secrets.
 
 ## Reference
 
